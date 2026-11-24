@@ -18,6 +18,65 @@ def confidence(value: str) -> float:
     return number
 
 
+def augmentation_options(profile: str) -> dict:
+    if profile == "none":
+        return {
+            "hsv_h": 0.0,
+            "hsv_s": 0.0,
+            "hsv_v": 0.0,
+            "degrees": 0.0,
+            "translate": 0.0,
+            "scale": 0.0,
+            "shear": 0.0,
+            "perspective": 0.0,
+            "flipud": 0.0,
+            "fliplr": 0.0,
+            "bgr": 0.0,
+            "mosaic": 0.0,
+            "mixup": 0.0,
+            "cutmix": 0.0,
+            "close_mosaic": 0,
+            "augmentations": [],
+        }
+
+    import albumentations as A
+
+    return {
+        "hsv_h": 0.015,
+        "hsv_s": 0.60,
+        "hsv_v": 0.45,
+        "degrees": 3.0,
+        "translate": 0.10,
+        "scale": 0.50,
+        "shear": 2.0,
+        "perspective": 0.0001,
+        "flipud": 0.0,
+        "fliplr": 0.50,
+        "bgr": 0.0,
+        "mosaic": 1.0,
+        "mixup": 0.0,
+        "cutmix": 0.0,
+        "close_mosaic": 10,
+        "augmentations": [
+            A.RandomBrightnessContrast(
+                brightness_limit=(-0.25, 0.25),
+                contrast_limit=(-0.25, 0.25),
+                p=0.35,
+            ),
+            A.CLAHE(clip_limit=(1.0, 3.0), tile_grid_size=(8, 8), p=0.15),
+            A.RandomGamma(gamma_limit=(70, 130), p=0.20),
+            A.GaussianBlur(blur_limit=(3, 7), sigma_limit=(0.2, 1.5), p=0.08),
+            A.ImageCompression(quality_range=(60, 100), p=0.10),
+            A.GridDistortion(
+                num_steps=5,
+                distort_limit=(-0.10, 0.10),
+                normalized=True,
+                p=0.15,
+            ),
+        ],
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Prepare data and fine-tune YOLO26n for vessel detection.")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -35,6 +94,12 @@ def main() -> None:
     train.add_argument("--name", default="yolo26n-vessels")
     train.add_argument("--workers", type=int, default=0)
     train.add_argument("--seed", type=int, default=42)
+    train.add_argument(
+        "--augmentation-profile",
+        choices=["balanced", "none"],
+        default="balanced",
+        help="Use marine lighting/lens augmentation or disable augmentation",
+    )
 
     evaluate = commands.add_parser("evaluate", help="Measure checkpoint precision, recall and mAP")
     evaluate.add_argument("--weights", type=Path, required=True)
@@ -101,6 +166,7 @@ def main() -> None:
     if args.command == "train":
         if args.workers < 0:
             train.error("--workers cannot be negative")
+        options.update(augmentation_options(args.augmentation_profile))
         model = YOLO(args.weights, task="detect")
         model.train(
             **options, epochs=args.epochs, project=str(args.project.resolve()), name=args.name,

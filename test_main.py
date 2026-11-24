@@ -3,7 +3,45 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from main import main
+from main import augmentation_options, main
+
+
+class TrainAugmentationTests(unittest.TestCase):
+    def test_balanced_profile_is_forwarded_to_training(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            data = root / "dataset.yaml"
+            data.write_text("train: images/train\nval: images/val\nnames:\n  0: vessel\n", encoding="utf-8")
+            with patch(
+                "sys.argv",
+                [
+                    "main.py",
+                    "train",
+                    "--data",
+                    str(data),
+                    "--epochs",
+                    "1",
+                    "--augmentation-profile",
+                    "balanced",
+                ],
+            ):
+                with patch("ultralytics.YOLO") as yolo:
+                    main()
+
+            options = yolo.return_value.train.call_args.kwargs
+            self.assertEqual(options["hsv_s"], 0.60)
+            self.assertEqual(options["hsv_v"], 0.45)
+            self.assertEqual(options["degrees"], 3.0)
+            self.assertEqual(options["mosaic"], 1.0)
+            self.assertEqual(options["close_mosaic"], 10)
+            self.assertEqual(len(options["augmentations"]), 6)
+
+    def test_none_profile_disables_training_augmentation(self):
+        options = augmentation_options("none")
+        self.assertEqual(options["augmentations"], [])
+        self.assertEqual(options["mosaic"], 0.0)
+        self.assertEqual(options["hsv_h"], 0.0)
+        self.assertEqual(options["fliplr"], 0.0)
 
 
 class PrelabelTests(unittest.TestCase):

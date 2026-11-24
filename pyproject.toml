@@ -5,6 +5,7 @@ description = "Fine-tune YOLO26n for single-class boat and vessel detection"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    "albumentations>=2.0,<3",
     "datasets==5.2.0",
     "pillow>=12,<13",
     "ultralytics==8.4.216",

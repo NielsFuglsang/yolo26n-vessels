@@ -25,6 +25,13 @@ uv run --no-sync python main.py train --data data/vessels-smoke/dataset.yaml --e
 2. **Fine-tune.** The first run downloads `yolo26n.pt`. On a small GPU start with `--batch 2` (or `--batch 1` if needed). The best checkpoint is saved in `runs/yolo26n-vessels/weights/best.pt` on the first run; Ultralytics increments the directory name on repeats.
 3. **Evaluate.** Tune on validation data. Check test precision, recall, and mAP only after deciding on the training settings. The published splits may contain visually similar frames; for a better estimate on new footage, reserve your own test images from entirely different clips or scenes. Inspect predictions on representative images, especially small vessels and difficult lighting.
 
+Training uses a balanced marine augmentation profile by default. It combines moderate HSV and brightness/contrast changes, CLAHE and gamma correction, mild blur and compression, geometric transforms, Mosaic, and mild grid distortion as a fish-eye-lens approximation. Validation and test data are not augmented. Use `--augmentation-profile none` to run a clean baseline:
+
+```shell
+uv run --no-sync python main.py train --epochs 50 --augmentation-profile balanced
+uv run --no-sync python main.py train --epochs 50 --augmentation-profile none
+```
+
 ```shell
 uv run --no-sync python main.py prepare --source singapore split-port
 uv run --no-sync python main.py train --device 0 --epochs 50 --batch 2
