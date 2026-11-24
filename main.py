@@ -1,13 +1,20 @@
 import argparse
 from pathlib import Path
 
-from prepare import SOURCES, prepare_dataset
+from prepare import IMAGE_EXTENSIONS, SOURCES, prepare_dataset
 
 
 def positive_int(value: str) -> int:
     number = int(value)
     if number < 1:
         raise argparse.ArgumentTypeError("must be at least 1")
+    return number
+
+
+def confidence(value: str) -> float:
+    number = float(value)
+    if not 0 < number <= 1:
+        raise argparse.ArgumentTypeError("must be greater than 0 and at most 1")
     return number
 
 
@@ -32,6 +39,14 @@ def main() -> None:
     evaluate = commands.add_parser("evaluate", help="Measure checkpoint precision, recall and mAP")
     evaluate.add_argument("--weights", type=Path, required=True)
     evaluate.add_argument("--split", choices=["val", "test"], default="test")
+    prelabel = commands.add_parser("prelabel", help="Generate vessel box proposals for manual review")
+    prelabel.add_argument("--weights", type=Path, required=True, help="Fine-tuned vessel checkpoint")
+    prelabel.add_argument("--source", type=Path, default=Path("data") / "examples", help="Flat image folder")
+    prelabel.add_argument("--conf", type=confidence, default=0.15)
+    prelabel.add_argument("--project", type=Path, default=Path("runs"))
+    prelabel.add_argument("--name", default="prelabel")
+    prelabel.add_argument("--device", default="cpu", help="For example: cpu or 0")
+    prelabel.add_argument("--imgsz", type=positive_int, default=640)
     for command in (train, evaluate):
         command.add_argument("--data", type=Path, default=Path("data") / "vessels" / "dataset.yaml")
         command.add_argument("--device", default="cpu", help="For example: cpu or 0")
@@ -47,6 +62,35 @@ def main() -> None:
         except (ValueError, FileExistsError) as error:
             prepare.error(str(error))
         print(f"Dataset ready: {output}")
+        return
+
+    if args.command == "prelabel":
+        if not args.weights.is_file():
+            prelabel.error(f"Checkpoint not found: {args.weights}")
+        if not args.source.is_dir():
+            prelabel.error(f"Image directory not found: {args.source}")
+        entries = list(args.source.iterdir())
+        if any(entry.is_dir() for entry in entries):
+            prelabel.error("Image directory must be flat; move nested images into a separate folder.")
+        if any(entry.is_file() and entry.suffix.lower() not in IMAGE_EXTENSIONS for entry in entries):
+            prelabel.error("Image directory must contain only JPG or PNG files.")
+        images = [entry for entry in entries if entry.is_file() and entry.suffix.lower() in IMAGE_EXTENSIONS]
+        if not images:
+            prelabel.error(f"No JPG or PNG images found: {args.source}")
+        if len({image.stem.casefold() for image in images}) != len(images):
+            prelabel.error("Images must have unique filenames without extensions.")
+
+        from ultralytics import YOLO
+
+        model = YOLO(str(args.weights), task="detect")
+        if model.names != {0: "vessel"}:
+            prelabel.error("Checkpoint must be a single-class detector with class 0 named 'vessel'.")
+        for _ in model.predict(
+            source=str(args.source.resolve()), device=args.device, imgsz=args.imgsz, conf=args.conf,
+            project=str(args.project.resolve()), name=args.name, exist_ok=False,
+            save=True, save_txt=True, save_conf=False, stream=True,
+        ):
+            pass
         return
 
     from ultralytics import YOLO

@@ -29,14 +29,27 @@ uv run --no-sync python main.py train --data data/vessels-smoke/dataset.yaml --e
 uv run --no-sync python main.py prepare --source singapore split-port
 uv run --no-sync python main.py train --device 0 --epochs 50 --batch 2
 uv run --no-sync python main.py evaluate --weights runs/yolo26n-vessels/weights/best.pt --device 0
-uv run --no-sync yolo predict model=runs/yolo26n-vessels/weights/best.pt source=data/examples project=runs device=0
 ```
 
 Use `--device cpu` (or omit the option for the Python commands) if no GPU is available. If you did not reserve a test split for a local-only dataset, use `evaluate --split val` instead and treat it as a validation result, not a held-out test.
 
+## Pre-label examples for review
+
+After training on both sources above, use the actual best checkpoint from the training run to propose boxes on a flat folder of images:
+
+```shell
+uv run --no-sync python main.py prelabel --weights runs/yolo26n-vessels/weights/best.pt --source data/examples --device 0
+```
+
+Omit `--device 0` for CPU. If the training directory was incremented, adjust `--weights` accordingly. The checkpoint must be a single-class detector with class `0` named `vessel`. The input folder must contain only JPG or PNG files with unique stems (for example, do not mix `frame.jpg` and `frame.png`).
+
+Ultralytics saves annotated JPG previews in `runs/prelabel/` and YOLO-format proposals in its `labels/` subfolder. Repeated runs use an incremented directory, such as `runs/prelabel-2/`, rather than overwriting earlier results. The original images are not modified. The default `--conf 0.15` favors more proposals for review; change it to adjust the precision/recall tradeoff.
+
+These are **unreviewed proposals**, not ground truth. Review every original image, including images without a label file: no file means no detection, not a confirmed negative. Correct or remove false boxes and add missed boats. Only create an empty label after confirming there are no vessels. Keep related frames together when splitting, and manually label a held-out set from different scenes before using your examples for training.
+
 ## Add your own images
 
-Keep raw examples under `data/examples/` to review predictions. If you use predictions to pre-label images, review the boxes, add missed vessels, and remove false positives before training. Export reviewed images and labels in this layout:
+Keep raw examples under `data/examples/` and review proposals with your preferred annotation tool. Export reviewed original images and labels in this layout (do not use the annotated previews as training images):
 
 ```text
 data/my-yolo/
